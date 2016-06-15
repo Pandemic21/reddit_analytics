@@ -16,7 +16,7 @@ def get_traffic_stats(subreddit):
 	url = 'https://www.reddit.com' + subreddit + 'about/traffic.json'
 
 	while True:
-		resp = requests.get(url, params=params)
+		resp = requests.get(url)
 		if resp.status_code == 429:
 			time.sleep(1)
 		else:
@@ -48,7 +48,7 @@ REDDITS_URL = 'https://www.reddit.com/reddits.json'
 headers = {'user-agent': 'Reddit analysis by /u/Pandemic21'}
 current = 0
 limit = 100
-total = 1000
+total = 1000000
 params = {"limit": limit}
 
 f = open("reddits.log", "a")
@@ -64,7 +64,6 @@ while k < limit:
 
 	# if the subreddit has public traffic stats, get them
 	if reddits['data']['children'][k]['data']['public_traffic'] == True:
-		time.sleep(1)
 		c.execute("INSERT INTO reddits VALUES (?,?,?,?,?,?,?,?,?)", ( \
 			reddits['data']['children'][k]['data']['url'], \
 			int(reddits['data']['children'][k]['data']['subscribers']), \
@@ -99,10 +98,41 @@ time.sleep(10)
 
 while current < total:
 	params = {"limit": limit, "after": reddits['data']['after']}
-	reddits = get_reddits(params)
+	try:
+		reddits = get_reddits(params)
+	except Exception as e:
+		print "Failed to get reddits, limit = " + str(limit) + ", after = " + str(reddits['data']['after'])
+		print str(e)
 	k = 0
 	while k < limit:
 		f.write(reddits['data']['children'][k]['data']['url'] + '\n')
+		# if the subreddit has public traffic stats, get them
+		if reddits['data']['children'][k]['data']['public_traffic'] == True:
+			c.execute("INSERT INTO reddits VALUES (?,?,?,?,?,?,?,?,?)", ( \
+				reddits['data']['children'][k]['data']['url'], \
+				int(reddits['data']['children'][k]['data']['subscribers']), \
+				reddits['data']['children'][k]['data']['over18'], \
+				reddits['data']['children'][k]['data']['public_description'], \
+				reddits['data']['children'][k]['data']['public_traffic'], \
+				reddits['data']['children'][k]['data']['quarantine'], \
+				reddits['data']['children'][k]['data']['subreddit_type'], \
+				int(reddits['data']['children'][k]['data']['created_utc']), \
+				str(get_traffic_stats(reddits['data']['children'][k]['data']['url'])), \
+				))
+		# if the subreddit does not have public traffic stats, insert ""
+		else:
+			c.execute("INSERT INTO reddits VALUES (?,?,?,?,?,?,?,?,?)", ( \
+				reddits['data']['children'][k]['data']['url'], \
+				int(reddits['data']['children'][k]['data']['subscribers']), \
+				reddits['data']['children'][k]['data']['over18'], \
+				reddits['data']['children'][k]['data']['public_description'], \
+				reddits['data']['children'][k]['data']['public_traffic'], \
+				reddits['data']['children'][k]['data']['quarantine'], \
+				reddits['data']['children'][k]['data']['subreddit_type'], \
+				int(reddits['data']['children'][k]['data']['created_utc']), \
+				""
+				))
+		conn.commit()
 		k = k + 1
 	current = current + limit
 	print str(int(float(current)/total*100)) + "%\t" + str(current) + " reddits found"
